@@ -11,7 +11,7 @@ the video description.
 | part | topic | status |
 |---|---|---|
 | [`part_1/`](part_1) | bigram and trigram models, counting vs gradient descent | done |
-| `part_2/` | MLP with character embeddings (Bengio et al., 2003) | — |
+| [`part_2/`](part_2) | MLP with character embeddings (Bengio et al., 2003) | done |
 
 ## Part 1 — bigram and trigram models
 
@@ -60,6 +60,55 @@ reach ~100, silently producing `inf` or `nan`. `F.cross_entropy` subtracts
 the maximum logit first, which leaves the result unchanged mathematically
 and defined numerically. It is also 1.45x faster over a full
 forward-backward step, most of the gain coming from its fused backward.
+
+## Part 2 — MLP with character embeddings
+
+| notebook | content |
+|---|---|
+| `with_video.ipynb` | MLP following Bengio et al. (2003): embeddings, tanh hidden layer, minibatches, learning rate search |
+| `from_scratch.ipynb` | the same model rewritten from memory, then tuned to beat the video's loss (exercises E01 and E02) |
+
+Average negative log-likelihood, in nats per character.
+
+| model | params | train | dev |
+|---|---|---|---|
+| trigram, counting (part 1) | 19 683 | — | 2.2222 |
+| MLP, video result | ~11 900 | ~2.13 | ~2.17 |
+| MLP, fixed init, context 3, embd 10, hidden 100 | 6 097 | 2.1106 | 2.1376 |
+| MLP, final: context 6, embd 50, hidden 500 | 165 377 | 1.798 | 1.978 ± 0.002 |
+
+The final dev loss is the mean and standard deviation over 4 seeds.
+Test loss of the final model: 1.9695, evaluated once.
+
+### What the exercises show
+
+The default initialization starts at a loss of 22.5 instead of
+ln 27 = 3.30: logits are too large and most tanh units saturate, so the
+first thousands of steps only undo the init. Scaling W2 by 0.01 and W1 by
+(5/3)/√fan_in fixes both. Model size cannot be judged before this is fixed.
+
+Tracking the dev loss during training shows a plateau at lr = 0.1, then a
+drop right after the decay to 0.01. The gain comes from the schedule, not
+from training longer, and the stages below 0.001 change nothing.
+
+Context helps up to 6 characters, embeddings up to 50 dimensions, the
+hidden layer up to 500 units. Past these points the training loss keeps
+falling while the dev loss stays flat or rises.
+
+L2 regularization shows the expected U shape: 1e-3 underfits (dev 2.06),
+1e-5 overfits (train 1.74, dev 1.99), 1e-4 sits in between.
+
+The best batch size depends on the model. For a small MLP, batches of 64 and
+128 gave the same result. For the final one, batch 64 overfits more than
+32 at the same number of steps (dev 1.985 vs 1.975), since it sees twice as
+many examples.
+
+The spread between seeds is about 0.002, so differences below ~0.005 in the
+tuning runs, such as hidden 500 vs 1000 or context 6 vs 7, are noise.
+
+A shuffle applied to a copy of the word list but not used for the split sent
+the dev loss to 2.41: the dev set then held names unlike those in the
+training set. A train/dev gap can come from the data before the model.
 
 ## Running
 
